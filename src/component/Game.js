@@ -1,23 +1,51 @@
 import Entity from "./Entity";
 import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+
+import Info from "./Info";
+
+let wolfs = { nb: 0 };
+let rabbits = { nb: 0 };
+let grass = { nb: 0 };
 
 const Game = (props) => {
+  const navigate = useNavigate();
+
   const height = 600;
   const width = 1200;
 
-  const wolfsStamina = 2000;
-  const rabbitsStamina = 1000;
+  const location = useLocation();
 
+  const wolfsNbInit = location.state.wolfSettings.nb;
+  const rabbitsNbInit = location.state.rabbitSettings.nb;
+
+  const wolfsStaminaMax = location.state.wolfSettings.stamina;
+  const rabbitsStaminaMax = location.state.rabbitSettings.stamina;
+
+  const wolfsSpeedMax = location.state.wolfSettings.speed;
+  const rabbitSpeedMax = location.state.rabbitSettings.speed;
+
+  const wolfsIncreaseStamina = location.state.wolfSettings.increaseStamina;
+  const rabbitsIncreaseStamina = location.state.rabbitSettings.increaseStamina;
+
+  const rabbitRangeGrass = location.state.rabbitSettings.rangeEat;
+
+  const grassNbInit = location.state.grassSettings.nb;
+  const grassDuplicationFactor = location.state.grassSettings.duplicationFactor;
+
+  // generate an id
   const randomId = () => {
     return Math.random().toString(36);
   };
 
+  // generate randomly a coordinate
   const randomCoord = () => {
     const x = Math.floor(Math.random() * width);
     const y = Math.floor(Math.random() * height);
     return [x, y];
   };
 
+  // genrate randomly a vector
   const randomVector = () => {
     const angle = Math.floor(Math.random() * 360);
     const x = Math.cos(angle);
@@ -26,19 +54,20 @@ const Game = (props) => {
     return [x, y];
   };
 
-  const initEntities = (nb) => {
+  // initialize wolfs, rabbits and grass
+  const initEntities = (nbWolfs, nbRabbits, nbGrass) => {
     const entity = [];
-    for (let i = 1; i <= nb / 5; i++) {
+    for (let i = 1; i <= nbWolfs; i++) {
       entity.push({
         id: randomId(),
         type: "wolf",
         coord: randomCoord(),
-        stamina: wolfsStamina,
+        stamina: wolfsStaminaMax,
         speed: 3,
         vector: randomVector(),
       });
     }
-    for (let i = nb + 1; i <= nb * 2; i++) {
+    for (let i = 1; i <= nbRabbits; i++) {
       entity.push({
         id: randomId(),
         type: "rabbit",
@@ -50,7 +79,7 @@ const Game = (props) => {
       });
     }
 
-    for (let i = nb * 2 + 1; i <= nb * 3; i++) {
+    for (let i = 1; i <= nbGrass; i++) {
       entity.push({
         id: randomId(),
         type: "grass",
@@ -77,7 +106,40 @@ const Game = (props) => {
     return newVector;
   };
 
-  const [entities, setEntities] = useState(initEntities(10));
+  const checkDistance = (coord, coordTarget, distLimit) => {
+    const x = coordTarget[0] - coord[0];
+    const y = coordTarget[1] - coord[1];
+
+    const dist = Math.sqrt(x ** 2 + y ** 2, 2);
+    return distLimit > dist ? dist : false;
+  };
+
+  const checkGameover = (nbWolfs, nbRabbits, nbGrass) => {
+    if (nbWolfs <= 0) {
+      navigate("/gameover", { state: { entity: "wolf" } });
+    } else if (nbRabbits <= 0) {
+      navigate("/gameover", { state: { entity: "rabbit" } });
+    } else if (nbGrass <= 0) {
+      navigate("/gameover", { state: { entity: "grass" } });
+    }
+    return false;
+  };
+
+  const getVector = (coord, coordTarget) => {
+    const angle = Math.atan2(
+      coordTarget[1] - coord[1],
+      coordTarget[0] - coord[0]
+    );
+    const x = Math.cos(angle);
+    const y = Math.sin(angle);
+
+    return [x, y];
+  };
+
+  const [entities, setEntities] = useState(
+    initEntities(wolfsNbInit, rabbitsNbInit, grassNbInit)
+  );
+
   const [timerGrass, setTimerGrass] = useState(0);
 
   const updateGame = () => {
@@ -89,18 +151,21 @@ const Game = (props) => {
         if (entity.type !== "grass") {
           let newVector = [entity.vector[0], entity.vector[1]];
           newVector = checkCollisions(entity, newVector);
+
+          // diminution of stamina
           let stamina = entity.stamina - 1;
+
           let speed =
             entity.type === "rabbit"
-              ? stamina / (rabbitsStamina / 5) + 1
-              : stamina / (wolfsStamina / 2) + 1;
+              ? ((rabbitSpeedMax - 1) * stamina) / rabbitsStaminaMax + 1
+              : ((wolfsSpeedMax - 1) * stamina) / wolfsStaminaMax + 1;
 
           let newEntitiesCoord;
           let type = entity.type;
 
           if (entity.type === "wolf") {
             stamina =
-              stamina > wolfsStamina ? (stamina = wolfsStamina) : stamina;
+              stamina > wolfsStaminaMax ? (stamina = wolfsStaminaMax) : stamina;
 
             let targetRabbit = false;
             entities.forEach((entitieAround) => {
@@ -132,46 +197,48 @@ const Game = (props) => {
                     entity.coord[1] - entitieAround.coord[1] <= 10 &&
                     entity.coord[1] - entitieAround.coord[1] >= -10
                   ) {
-                    stamina += wolfsStamina / 10;
-                    if (stamina >= wolfsStamina) {
+                    stamina += wolfsIncreaseStamina;
+                    if (stamina >= wolfsStaminaMax) {
                       stamina /= 2;
                       duplicatedEntities.push({
                         id: randomId(),
                         type: entity.type,
                         coord: randomCoord(),
                         // coord: entity.coord,
-                        stamina: 500,
-                        speed: 3,
+                        stamina: wolfsStaminaMax / 2,
+                        speed: wolfsSpeedMax,
                         vector: randomVector(),
                       });
-                      // console.log(newEntities);
                     }
                   }
                 }
               }
             });
 
-            const distX = targetRabbit.coord[0] - entity.coord[0];
-            const distY = targetRabbit.coord[1] - entity.coord[1];
-            const angle = Math.atan2(distY, distX);
+            const vector = getVector(entity.coord, targetRabbit.coord);
 
             newEntitiesCoord = [
-              entity.coord[0] + Math.cos(angle) * speed,
-              entity.coord[1] + Math.sin(angle) * speed,
+              entity.coord[0] + vector[0] * speed,
+              entity.coord[1] + vector[1] * speed,
             ];
 
             return {
               ...entity,
               coord: newEntitiesCoord,
-              vector: newVector,
+              vector,
               type,
               stamina,
               speed,
             };
           } else if (entity.type === "rabbit") {
             stamina =
-              stamina > rabbitsStamina ? (stamina = rabbitsStamina) : stamina;
+              stamina > rabbitsStaminaMax
+                ? (stamina = rabbitsStaminaMax)
+                : stamina;
+
             let eaten = false;
+            let distRabbitGrass = rabbitRangeGrass;
+
             entities.forEach((entitieAround) => {
               if (entitieAround.type === "wolf") {
                 if (
@@ -183,25 +250,33 @@ const Game = (props) => {
                   eaten = true;
                 }
               } else if (entitieAround.type === "grass") {
+                const dist = checkDistance(
+                  entity.coord,
+                  entitieAround.coord,
+                  distRabbitGrass
+                );
+                if (dist) {
+                  distRabbitGrass = dist;
+                  newVector = getVector(entity.coord, entitieAround.coord);
+                }
                 if (
                   entity.coord[0] - entitieAround.coord[0] <= 10 &&
                   entity.coord[0] - entitieAround.coord[0] >= -10 &&
                   entity.coord[1] - entitieAround.coord[1] <= 10 &&
                   entity.coord[1] - entitieAround.coord[1] >= -10
                 ) {
-                  stamina += rabbitsStamina / 5;
-                  if (stamina >= rabbitsStamina) {
+                  stamina += rabbitsIncreaseStamina;
+                  if (stamina >= rabbitsStaminaMax) {
                     stamina = stamina * 0.8;
                     duplicatedEntities.push({
                       id: randomId(),
                       type: entity.type,
                       coord: entity.coord,
-                      stamina: rabbitsStamina,
-                      speed: 6,
+                      stamina: rabbitsStaminaMax,
+                      speed: rabbitSpeedMax,
                       vector: randomVector(),
                       eaten: false,
                     });
-                    // console.log(newEntities);
                   }
                 }
               }
@@ -217,7 +292,7 @@ const Game = (props) => {
               coord: newEntitiesCoord,
               vector: newVector,
               type,
-              stamina: stamina,
+              stamina,
               speed,
               eaten,
             };
@@ -290,15 +365,42 @@ const Game = (props) => {
       .filter(Boolean);
 
     if (duplicatedEntities.length > 0) {
-      // newEntities = [...newEntities, ...duplicatedEntities];
       duplicatedEntities.forEach((duplicatedEntity) => {
         newEntities.push(duplicatedEntity);
       });
-      // console.log(duplicatedEntities);
       duplicatedEntities = [];
     }
 
-    if (timerGrass % 20 === 0) {
+    const nbWolfs = newEntities.filter(
+      (entity) => entity.type === "wolf"
+    ).length;
+
+    const nbRabbits = newEntities.filter(
+      (entity) => entity.type === "rabbit"
+    ).length;
+
+    const nbGrass = newEntities.filter(
+      (entity) => entity.type === "grass"
+    ).length;
+
+    checkGameover(nbWolfs, nbRabbits, nbGrass);
+
+    wolfs = { ...wolfs, nb: nbWolfs };
+    rabbits = { ...rabbits, nb: nbRabbits };
+    grass = { ...grass, nb: nbGrass };
+
+    // https://www.geogebra.org/calculator
+    // f(x)= -a log10(x) + 2a
+    let factor = Math.floor(
+      -grassDuplicationFactor * Math.log10(nbGrass) + 2 * grassDuplicationFactor
+    );
+    // f(x) = -0.5x + 50
+    // let factor = Math.floor(
+    //   -(grassDuplicationFactor / 10) * nbGrass + grassDuplicationFactor * 10
+    // );
+    factor = factor < 1 ? 1 : factor;
+
+    if (timerGrass % factor === 0 && nbGrass > 0) {
       newEntities.push({
         id: randomId(),
         type: "grass",
@@ -308,7 +410,6 @@ const Game = (props) => {
     setEntities(newEntities);
   };
 
-  // *** useEffect ***
   useEffect(() => {
     const intervalId = setTimeout(() => {
       updateGame();
@@ -319,9 +420,10 @@ const Game = (props) => {
 
   return (
     <>
+      <Info wolfs={wolfs} rabbits={rabbits} grass={grass} />
       <div
         className="game"
-        style={{ width: width + 10 + "px", height: height + 10 + "px" }}
+        style={{ width: width + 20 + "px", height: height + 20 + "px" }}
       >
         {entities.map((entity, i) => {
           return <Entity entity={entity} key={i} />;
