@@ -47,7 +47,7 @@ const Game = (props) => {
 
   // genrate randomly a vector
   const randomVector = () => {
-    const angle = Math.floor(Math.random() * 360);
+    const angle = Math.floor(Math.random() * 360) * (Math.PI / 180);
     const x = Math.cos(angle);
     const y = Math.sin(angle);
 
@@ -110,7 +110,7 @@ const Game = (props) => {
     const x = coordTarget[0] - coord[0];
     const y = coordTarget[1] - coord[1];
 
-    const dist = Math.sqrt(x ** 2 + y ** 2, 2);
+    const dist = Math.sqrt(x ** 2 + y ** 2);
     return distLimit > dist ? dist : false;
   };
 
@@ -143,7 +143,7 @@ const Game = (props) => {
   const [timerGrass, setTimerGrass] = useState(0);
 
   const updateGame = () => {
-    setTimerGrass(timerGrass + 1);
+    setTimerGrass((prev) => prev + 1);
     let duplicatedEntities = [];
 
     let newEntities = entities
@@ -167,49 +167,38 @@ const Game = (props) => {
             stamina =
               stamina > wolfsStaminaMax ? (stamina = wolfsStaminaMax) : stamina;
 
-            let targetRabbit = false;
+            let targetRabbit = null;
+            let minDist = Infinity;
+
             entities.forEach((entitieAround) => {
               if (entitieAround.type === "rabbit") {
-                if (!targetRabbit) {
+                const dist = Math.sqrt(
+                  (entity.coord[0] - entitieAround.coord[0]) ** 2 +
+                    (entity.coord[1] - entitieAround.coord[1]) ** 2
+                );
+
+                if (dist < minDist) {
+                  minDist = dist;
                   targetRabbit = entitieAround;
-                } else {
-                  const wolfCoord = entity.coord;
-                  const rabbitCoord = entitieAround.coord;
-                  const targetCoord = targetRabbit.coord;
+                }
 
-                  const distArround = Math.sqrt(
-                    (rabbitCoord[0] - wolfCoord[0]) ** 2 +
-                      (rabbitCoord[1] - wolfCoord[1]) ** 2
-                  );
-
-                  const distTarget = Math.sqrt(
-                    (targetCoord[0] - wolfCoord[0]) ** 2 +
-                      (targetCoord[1] - wolfCoord[1]) ** 2
-                  );
-
-                  if (distArround < distTarget) {
-                    targetRabbit = entitieAround;
-                  }
-
-                  if (
-                    entity.coord[0] - entitieAround.coord[0] <= 10 &&
-                    entity.coord[0] - entitieAround.coord[0] >= -10 &&
-                    entity.coord[1] - entitieAround.coord[1] <= 10 &&
-                    entity.coord[1] - entitieAround.coord[1] >= -10
-                  ) {
-                    stamina += wolfsIncreaseStamina;
-                    if (stamina >= wolfsStaminaMax) {
-                      stamina /= 2;
-                      duplicatedEntities.push({
-                        id: randomId(),
-                        type: entity.type,
-                        coord: randomCoord(),
-                        // coord: entity.coord,
-                        stamina: wolfsStaminaMax / 2,
-                        speed: wolfsSpeedMax,
-                        vector: randomVector(),
-                      });
-                    }
+                if (
+                  entity.coord[0] - entitieAround.coord[0] <= 10 &&
+                  entity.coord[0] - entitieAround.coord[0] >= -10 &&
+                  entity.coord[1] - entitieAround.coord[1] <= 10 &&
+                  entity.coord[1] - entitieAround.coord[1] >= -10
+                ) {
+                  stamina += wolfsIncreaseStamina;
+                  if (stamina >= wolfsStaminaMax) {
+                    stamina /= 2;
+                    duplicatedEntities.push({
+                      id: randomId(),
+                      type: entity.type,
+                      coord: randomCoord(),
+                      stamina: wolfsStaminaMax / 2,
+                      speed: wolfsSpeedMax,
+                      vector: randomVector(),
+                    });
                   }
                 }
               }
@@ -389,18 +378,13 @@ const Game = (props) => {
     rabbits = { ...rabbits, nb: nbRabbits };
     grass = { ...grass, nb: nbGrass };
 
-    // https://www.geogebra.org/calculator
-    // f(x)= -a log10(x) + 2a
     let factor = Math.floor(
       -grassDuplicationFactor * Math.log10(nbGrass) + 2 * grassDuplicationFactor
     );
-    // f(x) = -0.5x + 50
-    // let factor = Math.floor(
-    //   -(grassDuplicationFactor / 10) * nbGrass + grassDuplicationFactor * 10
-    // );
+
     factor = factor < 1 ? 1 : factor;
 
-    if (timerGrass % factor === 0 && nbGrass > 0) {
+    if (timerGrass % factor === 0 && nbGrass > 0 && nbGrass < 150) {
       newEntities.push({
         id: randomId(),
         type: "grass",
@@ -413,10 +397,10 @@ const Game = (props) => {
   useEffect(() => {
     const intervalId = setTimeout(() => {
       updateGame();
-    }, 10);
+    }, 15);
 
     return () => clearInterval(intervalId);
-  }, [entities]);
+  }, [timerGrass]);
 
   return (
     <>
@@ -425,8 +409,8 @@ const Game = (props) => {
         className="game"
         style={{ width: width + 20 + "px", height: height + 20 + "px" }}
       >
-        {entities.map((entity, i) => {
-          return <Entity entity={entity} key={i} />;
+        {entities.map((entity) => {
+          return <Entity entity={entity} key={entity.i} />;
         })}
       </div>
     </>
